@@ -1,0 +1,8 @@
+asyncio
+httpx
+sentence-transformers
+torch
+faiss-cpu
+numpy
+beautifulsoup4
+lxml

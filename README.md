@@ -1,6 +1,12 @@
 # Multi-Source Research Aggregator
 
-A standalone Python script that aggregates research papers and documents from multiple academic and health-related sources.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Poetry](https://img.shields.io/badge/dependency%20management-poetry-blue.svg)](https://python-poetry.org/)
+
+A standalone Python application that aggregates research papers and documents from multiple academic and health-related sources, featuring semantic search capabilities powered by sentence transformers and FAISS.
+
+**Developed by [SolaceAI](https://github.com/solaceai-evidence)**
 
 ## Features
 
@@ -89,6 +95,32 @@ query_term = "your custom search query here"
 - "malaria vaccine effectiveness in Africa"
 - "COVID-19 mental health impacts"
 - "climate change health risks"
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to:
+
+- Report issues
+- Submit feature requests
+- Add new data sources
+- Improve documentation
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- [Semantic Scholar](https://www.semanticscholar.org/) for academic paper search
+- [OpenAlex](https://openalex.org/) for open academic works
+- [ReliefWeb](https://reliefweb.int/) for humanitarian reports
+- [WHO IRIS](https://iris.who.int/) for World Health Organization documents
+- [Sentence Transformers](https://www.sbert.net/) for semantic embeddings
+- [FAISS](https://faiss.ai/) for efficient similarity search
+
+## Organization
+
+This project is maintained by [SolaceAI Evidence](https://github.com/solaceai-evidence), an organization focused on developing AI tools for evidence-based research and decision making.
 
 ## Output
 

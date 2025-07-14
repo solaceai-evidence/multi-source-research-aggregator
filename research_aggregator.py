@@ -37,8 +37,6 @@ def initialize_model() -> SentenceTransformer:
         return model
     except Exception as e:
         print(f"Error loading model: {e}")
-        print("This might be due to network issues or first-time download.")
-        print("Please check your internet connection and try again.")
         exit(1)
 
 
@@ -47,7 +45,6 @@ model = initialize_model()
 
 # Utility functions
 def reconstruct_abstract(inverted_index: Dict[str, List[int]]) -> Optional[str]:
-    """Reconstruct abstract from OpenAlex inverted index format."""
     if not inverted_index:
         return None
     position_map = {
@@ -57,7 +54,6 @@ def reconstruct_abstract(inverted_index: Dict[str, List[int]]) -> Optional[str]:
 
 
 def clean_html(raw_html: str) -> Optional[str]:
-    """Clean HTML content and extract text."""
     return (
         BeautifulSoup(raw_html, "html.parser").get_text(separator=" ").strip()
         if raw_html
@@ -66,7 +62,6 @@ def clean_html(raw_html: str) -> Optional[str]:
 
 
 def flag_missing_abstract(doc: Dict) -> Dict:
-    """Flag documents with missing abstracts."""
     if not doc.get("abstract"):
         doc["missing_abstract"] = True
     return doc
@@ -81,7 +76,6 @@ async def make_request(
     headers: Dict = None,
     follow_redirects: bool = False,
 ) -> Dict:
-    """Generic HTTP request handler."""
     async with httpx.AsyncClient(follow_redirects=follow_redirects) as client:
         if method.upper() == "POST":
             response = await client.post(url, json=json_data, headers=headers or {})
@@ -107,31 +101,29 @@ async def fetch_semantic_scholar(
 
     if Config.SEMANTIC_SCHOLAR_API_KEY:
         headers["x-api-key"] = Config.SEMANTIC_SCHOLAR_API_KEY
-        print("  → Using API key")
+        print("Using API key")
     else:
-        print("  → No API key, using rate-limited access")
+        print("No API key, using rate-limited access")
 
     response = await make_request(
         Config.SEMANTIC_SCHOLAR_URL, params=params, headers=headers
     )
     data = response.json().get("data", [])
-    print(f"  ✓ Completed ({len(data)} results)")
+    print(f"Completed ({len(data)} results)")
     return data
 
 
 async def fetch_openalex(query: str, limit: int = Config.DEFAULT_LIMIT) -> List[Dict]:
-    """Fetch data from OpenAlex API."""
     print("Fetching from OpenAlex...")
 
     params = {"search": query, "per-page": limit}
     response = await make_request(Config.OPENALEX_URL, params=params)
     data = response.json().get("results", [])
-    print(f"  ✓ Completed ({len(data)} results)")
+    print(f"Completed ({len(data)} results)")
     return data
 
 
 async def fetch_reliefweb(query: str, limit: int = Config.DEFAULT_LIMIT) -> List[Dict]:
-    """Fetch data from ReliefWeb API."""
     print("Fetching from ReliefWeb...")
 
     payload = {
@@ -143,12 +135,11 @@ async def fetch_reliefweb(query: str, limit: int = Config.DEFAULT_LIMIT) -> List
         Config.RELIEFWEB_URL, method="POST", json_data=payload
     )
     data = response.json().get("data", [])
-    print(f"  ✓ Completed ({len(data)} results)")
+    print(f"Completed ({len(data)} results)")
     return data
 
 
 async def fetch_who_iris(query: str, limit: int = Config.DEFAULT_LIMIT) -> List[Dict]:
-    """Fetch data from WHO IRIS OAI-PMH endpoint."""
     print("Fetching from WHO IRIS...")
 
     params = {
@@ -196,13 +187,12 @@ async def fetch_who_iris(query: str, limit: int = Config.DEFAULT_LIMIT) -> List[
                 )
 
     result = records[:limit]
-    print(f"  ✓ Completed ({len(result)} results)")
+    print(f"Completed ({len(result)} results)")
     return result
 
 
 # Data harmonization
 def harmonise_result(source: str, item: Dict) -> Dict:
-    """Convert results from different sources to a unified format."""
     harmonizers = {
         "semantic_scholar": lambda x: {
             "title": x.get("title"),
@@ -239,7 +229,6 @@ def harmonise_result(source: str, item: Dict) -> Dict:
 
 
 def _extract_reliefweb_author(fields: Dict) -> List[str]:
-    """Helper to extract author name from ReliefWeb source field."""
     source_field = fields.get("source", [])
     if isinstance(source_field, list) and source_field:
         author_name = (
@@ -256,7 +245,6 @@ def _extract_reliefweb_author(fields: Dict) -> List[str]:
 
 # Vector store operations
 def build_vector_store(documents: List[Dict]) -> Dict:
-    """Build FAISS vector store from documents."""
     if not documents:
         return {"index": None, "documents": []}
 
@@ -278,7 +266,6 @@ def build_vector_store(documents: List[Dict]) -> Dict:
 
 
 def semantic_search(query: str, store: Dict, top_k: int = 5) -> List[Dict]:
-    """Perform semantic search on the vector store."""
     if store["index"] is None:
         return []
 
@@ -289,7 +276,6 @@ def semantic_search(query: str, store: Dict, top_k: int = 5) -> List[Dict]:
 
 # Main aggregation function
 async def aggregate(query: str, limit: int = Config.DEFAULT_LIMIT) -> List[Dict]:
-    """Aggregate research from all sources."""
     print(f"Searching for: {query}")
     print("Fetching from multiple sources...")
 
@@ -329,7 +315,6 @@ async def aggregate(query: str, limit: int = Config.DEFAULT_LIMIT) -> List[Dict]
 
 # Main application
 def display_results(results: List[Dict], query: str, top_k: int = 5) -> None:
-    """Display search results in a formatted manner."""
     print(f"\nTop {top_k} most relevant results for: '{query}'")
     print("-" * 60)
 
@@ -346,11 +331,10 @@ def display_results(results: List[Dict], query: str, top_k: int = 5) -> None:
             print(f"   Year: {year}")
 
         if result.get("missing_abstract"):
-            print("   ⚠️  Missing or incomplete abstract")
+            print("Missing or incomplete abstract")
 
 
 async def main(query: str = "malaria vaccine effectiveness in Africa") -> None:
-    """Main application entry point."""
     print("Multi-Source Research Aggregator")
     print("=" * 40)
 
@@ -374,7 +358,6 @@ async def main(query: str = "malaria vaccine effectiveness in Africa") -> None:
 
 
 def run_with_error_handling(func, *args, **kwargs) -> None:
-    """Run a function with comprehensive error handling."""
     try:
         if asyncio.iscoroutinefunction(func):
             asyncio.run(func(*args, **kwargs))
@@ -389,8 +372,8 @@ def run_with_error_handling(func, *args, **kwargs) -> None:
         traceback.print_exc()
 
 
+# CLI entry point for Poetry script command
 def cli_main() -> None:
-    """Entry point for Poetry script command."""
     print("Starting Multi-Source Research Aggregator (CLI)...")
     run_with_error_handling(main)
 

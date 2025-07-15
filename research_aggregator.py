@@ -8,6 +8,12 @@ import faiss
 import numpy as np
 import pickle
 from bs4 import BeautifulSoup
+import os
+from dotenv import load_dotenv
+import time
+
+# Load environment variables
+load_dotenv()
 
 # Constants
 APP_NAME = "MultiSourceResearchAggregator"
@@ -51,18 +57,56 @@ async def fetch_semantic_scholar(query: str, limit: int = 5) -> List[Dict]:
         "limit": limit,
         "fields": "title,abstract,authors,year,url",
     }
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        r = await client.get(SEMANTIC_SCHOLAR_URL, params=params)
-        r.raise_for_status()
-        return r.json().get("data", [])
+
+    headers = {}
+    api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+    if api_key:
+        headers["x-api-key"] = api_key
+
+    # Retry logic for rate limiting
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.get(
+                    SEMANTIC_SCHOLAR_URL, params=params, headers=headers
+                )
+                r.raise_for_status()
+                return r.json().get("data", [])
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:  # Rate limit
+                if attempt < max_retries - 1:
+                    wait_time = 2**attempt  # Exponential backoff
+                    print(
+                        f"Rate limited by Semantic Scholar. Retrying in {wait_time}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    print(
+                        "Semantic Scholar rate limit exceeded. Returning empty results."
+                    )
+                    return []
+            else:
+                print(f"Semantic Scholar API error: {e}")
+                return []
+        except Exception as e:
+            print(f"Semantic Scholar fetch error: {e}")
+            return []
+
+    return []
 
 
 async def fetch_openalex(query: str, limit: int = 5) -> List[Dict]:
     params = {"search": query, "per-page": limit}
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        r = await client.get(OPENALEX_URL, params=params)
-        r.raise_for_status()
-        return r.json().get("results", [])
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            r = await client.get(OPENALEX_URL, params=params)
+            r.raise_for_status()
+            return r.json().get("results", [])
+    except Exception as e:
+        print(f"OpenAlex fetch error: {e}")
+        return []
 
 
 async def fetch_reliefweb(query: str, limit: int = 5) -> List[Dict]:
@@ -71,10 +115,14 @@ async def fetch_reliefweb(query: str, limit: int = 5) -> List[Dict]:
         "limit": limit,
         "fields": {"include": ["title", "url", "body-html", "source", "date"]},
     }
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        r = await client.post(RELIEFWEB_URL, json=payload)
-        r.raise_for_status()
-        return r.json().get("data", [])
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            r = await client.post(RELIEFWEB_URL, json=payload)
+            r.raise_for_status()
+            return r.json().get("data", [])
+    except Exception as e:
+        print(f"ReliefWeb fetch error: {e}")
+        return []
 
 
 async def fetch_who_iris(query: str, limit: int = 5) -> List[Dict]:
@@ -84,38 +132,44 @@ async def fetch_who_iris(query: str, limit: int = 5) -> List[Dict]:
         "set": "default",
         "q": query,
     }
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        r = await client.get(WHO_IRIS_OAI_URL, params=params)
-        r.raise_for_status()
-        xml_data = r.text
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            r = await client.get(WHO_IRIS_OAI_URL, params=params)
+            r.raise_for_status()
+            xml_data = r.text
 
-    root = ET.fromstring(xml_data)
-    ns = {
-        "oai": "http://www.openarchives.org/OAI/2.0/",
-        "dc": "http://purl.org/dc/elements/1.1/",
-    }
-    records = []
-    for record in root.findall(".//oai:record", ns):
-        metadata = record.find(".//oai:metadata", ns)
-        if metadata is not None:
-            dc = metadata.find("dc:dc", ns)
-            if dc is not None:
-                title = dc.findtext("dc:title", default="", namespaces=ns)
-                creator = dc.findtext("dc:creator", default="", namespaces=ns)
-                date = dc.findtext("dc:date", default="", namespaces=ns)
-                identifier = dc.findtext("dc:identifier", default="", namespaces=ns)
-                description = dc.findtext("dc:description", default="", namespaces=ns)
-                records.append(
-                    {
-                        "title": title,
-                        "abstract": description,
-                        "authors": [creator] if creator else [],
-                        "year": date,
-                        "url": identifier,
-                        "source": "WHO IRIS",
-                    }
-                )
-    return records[:limit]
+        root = ET.fromstring(xml_data)
+        ns = {
+            "oai": "http://www.openarchives.org/OAI/2.0/",
+            "dc": "http://purl.org/dc/elements/1.1/",
+        }
+        records = []
+        for record in root.findall(".//oai:record", ns):
+            metadata = record.find(".//oai:metadata", ns)
+            if metadata is not None:
+                dc = metadata.find("dc:dc", ns)
+                if dc is not None:
+                    title = dc.findtext("dc:title", default="", namespaces=ns)
+                    creator = dc.findtext("dc:creator", default="", namespaces=ns)
+                    date = dc.findtext("dc:date", default="", namespaces=ns)
+                    identifier = dc.findtext("dc:identifier", default="", namespaces=ns)
+                    description = dc.findtext(
+                        "dc:description", default="", namespaces=ns
+                    )
+                    records.append(
+                        {
+                            "title": title,
+                            "abstract": description,
+                            "authors": [creator] if creator else [],
+                            "year": date,
+                            "url": identifier,
+                            "source": "WHO IRIS",
+                        }
+                    )
+        return records[:limit]
+    except Exception as e:
+        print(f"WHO IRIS fetch error: {e}")
+        return []
 
 
 # Harmonise results from different sources
@@ -198,11 +252,17 @@ async def aggregate(query: str) -> List[Dict]:
     print(f"Searching for: {query}")
     print("Fetching from multiple sources...")
 
+    # Fetch data with status updates
     ss_data, oa_data, rw_data, who_data = await asyncio.gather(
         fetch_semantic_scholar(query),
         fetch_openalex(query),
         fetch_reliefweb(query),
         fetch_who_iris(query),
+    )
+
+    # Report on what we got from each source
+    print(
+        f"Results: Semantic Scholar({len(ss_data)}), OpenAlex({len(oa_data)}), ReliefWeb({len(rw_data)}), WHO IRIS({len(who_data)})"
     )
 
     results = []

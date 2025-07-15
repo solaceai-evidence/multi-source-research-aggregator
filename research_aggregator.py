@@ -165,47 +165,82 @@ async def fetch_reliefweb(query: str, limit: int = 5) -> List[Dict]:
 
 
 async def fetch_who_iris(query: str, limit: int = 5) -> List[Dict]:
+    """
+    WHO IRIS OAI-PMH endpoint doesn't support search parameters.
+    We fetch recent records and filter them locally by title/description/subject.
+    """
     params = {
         "verb": "ListRecords",
         "metadataPrefix": "oai_dc",
-        "set": "default",
-        "q": query,
     }
+
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
             r = await client.get(WHO_IRIS_OAI_URL, params=params)
             r.raise_for_status()
             xml_data = r.text
 
         root = ET.fromstring(xml_data)
+
+        # Check for OAI-PMH errors
+        error_elements = root.findall(".//{http://www.openarchives.org/OAI/2.0/}error")
+        if error_elements:
+            return []
+
         ns = {
             "oai": "http://www.openarchives.org/OAI/2.0/",
             "dc": "http://purl.org/dc/elements/1.1/",
         }
-        records = []
-        for record in root.findall(".//oai:record", ns):
+
+        # Get all records and filter locally
+        all_records = root.findall(".//oai:record", ns)
+
+        # Filter records by query terms (case-insensitive)
+        query_terms = [
+            term.lower() for term in query.split() if len(term) > 2
+        ]  # Skip short words
+        matched_records = []
+
+        for record in all_records:
             metadata = record.find(".//oai:metadata", ns)
             if metadata is not None:
                 dc = metadata.find("dc:dc", ns)
                 if dc is not None:
                     title = dc.findtext("dc:title", default="", namespaces=ns)
-                    creator = dc.findtext("dc:creator", default="", namespaces=ns)
-                    date = dc.findtext("dc:date", default="", namespaces=ns)
-                    identifier = dc.findtext("dc:identifier", default="", namespaces=ns)
                     description = dc.findtext(
                         "dc:description", default="", namespaces=ns
                     )
-                    records.append(
-                        {
-                            "title": title,
-                            "abstract": description,
-                            "authors": [creator] if creator else [],
-                            "year": date,
-                            "url": identifier,
-                            "source": "WHO IRIS",
-                        }
-                    )
-        return records[:limit]
+                    subject = dc.findtext("dc:subject", default="", namespaces=ns)
+
+                    # Combine title, description, and subject for matching
+                    searchable_text = f"{title} {description} {subject}".lower()
+
+                    # Check if any query terms match (need at least one meaningful term)
+                    if any(
+                        term in searchable_text for term in query_terms if len(term) > 3
+                    ):
+                        creator = dc.findtext("dc:creator", default="", namespaces=ns)
+                        date = dc.findtext("dc:date", default="", namespaces=ns)
+                        identifier = dc.findtext(
+                            "dc:identifier", default="", namespaces=ns
+                        )
+
+                        matched_records.append(
+                            {
+                                "title": title,
+                                "abstract": description,
+                                "authors": [creator] if creator else [],
+                                "year": date,
+                                "url": identifier,
+                                "source": "WHO IRIS",
+                            }
+                        )
+
+                        if len(matched_records) >= limit:
+                            break
+
+        return matched_records
+
     except Exception as e:
         print(f"WHO IRIS fetch error: {e}")
         return []
@@ -305,10 +340,10 @@ async def aggregate(query: str) -> List[Dict]:
     )
 
     # Debug raw data structures (optional - can be commented out)
-    debug_raw_data(ss_data, "Semantic Scholar")
-    debug_raw_data(oa_data, "OpenAlex")
-    debug_raw_data(rw_data, "ReliefWeb")
-    debug_raw_data(who_data, "WHO IRIS")
+    # debug_raw_data(ss_data, "Semantic Scholar")
+    # debug_raw_data(oa_data, "OpenAlex")
+    # debug_raw_data(rw_data, "ReliefWeb")
+    # debug_raw_data(who_data, "WHO IRIS")
 
     results = []
 
@@ -366,7 +401,7 @@ async def main():
     # Example query 3: climate change impact on vector-borne diseases | vector-borne diseases | vector-borne diseases Europe
     # Example query 4: COVID-19 impact on mental health
     # Example query 5: white paint corrugated iron roofs effects
-    query_term = "vector-borne diseases Europe"
+    query_term = "malaria vaccine effectiveness"
 
     all_results = await aggregate(query_term)
 

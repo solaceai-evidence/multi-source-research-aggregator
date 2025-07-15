@@ -50,6 +50,45 @@ def flag_missing_abstract(doc: Dict) -> Dict:
     return doc
 
 
+def debug_raw_data(data, source_name, limit=1):
+    """Debug function to show raw API response structure"""
+    print(f"\n--- DEBUG: {source_name} raw data structure ---")
+    if not data:
+        print("No data received")
+        return
+
+    for i, item in enumerate(data[:limit]):
+        print(f"Item {i+1} keys: {list(item.keys())}")
+
+        # Show abstract-related fields
+        if source_name == "Semantic Scholar":
+            print(
+                f"  abstract: {item.get('abstract', 'MISSING')[:100] if item.get('abstract') else 'MISSING'}..."
+            )
+        elif source_name == "OpenAlex":
+            abstract_idx = item.get("abstract_inverted_index")
+            print(
+                f"  abstract_inverted_index: {'Present' if abstract_idx else 'MISSING'}"
+            )
+            if abstract_idx:
+                reconstructed = reconstruct_abstract(abstract_idx)
+                print(
+                    f"  reconstructed preview: {reconstructed[:100] if reconstructed else 'FAILED'}..."
+                )
+        elif source_name == "ReliefWeb":
+            fields = item.get("fields", {})
+            body_html = fields.get("body-html")
+            print(f"  body-html: {'Present' if body_html else 'MISSING'}")
+            if body_html:
+                cleaned = clean_html(body_html)
+                print(f"  cleaned preview: {cleaned[:100] if cleaned else 'FAILED'}...")
+        elif source_name == "WHO IRIS":
+            print(
+                f"  abstract (description): {item.get('abstract', 'MISSING')[:100] if item.get('abstract') else 'MISSING'}..."
+            )
+    print("--- END DEBUG ---\n")
+
+
 # Scholar search engines fetchers
 async def fetch_semantic_scholar(query: str, limit: int = 5) -> List[Dict]:
     params = {
@@ -265,13 +304,54 @@ async def aggregate(query: str) -> List[Dict]:
         f"Results: Semantic Scholar({len(ss_data)}), OpenAlex({len(oa_data)}), ReliefWeb({len(rw_data)}), WHO IRIS({len(who_data)})"
     )
 
-    results = []
-    results.extend([harmonise_result("semantic_scholar", d) for d in ss_data])
-    results.extend([harmonise_result("openalex", d) for d in oa_data])
-    results.extend([harmonise_result("reliefweb", d) for d in rw_data])
-    results.extend([harmonise_result("who_iris", d) for d in who_data])
+    # Debug raw data structures (optional - can be commented out)
+    debug_raw_data(ss_data, "Semantic Scholar")
+    debug_raw_data(oa_data, "OpenAlex")
+    debug_raw_data(rw_data, "ReliefWeb")
+    debug_raw_data(who_data, "WHO IRIS")
 
-    print(f"Found {len(results)} total results")
+    results = []
+
+    # Process and check abstracts for each source
+    ss_results = [harmonise_result("semantic_scholar", d) for d in ss_data]
+    oa_results = [harmonise_result("openalex", d) for d in oa_data]
+    rw_results = [harmonise_result("reliefweb", d) for d in rw_data]
+    who_results = [harmonise_result("who_iris", d) for d in who_data]
+
+    # Debug abstract availability
+    def check_abstracts(source_results, source_name):
+        with_abstracts = sum(
+            1 for r in source_results if r.get("abstract") and r.get("abstract").strip()
+        )
+        without_abstracts = len(source_results) - with_abstracts
+        print(
+            f"  {source_name}: {with_abstracts} with abstracts, {without_abstracts} without"
+        )
+
+        # Show first few abstracts for debugging
+        for i, result in enumerate(source_results[:2]):  # Show first 2 results
+            abstract = result.get("abstract", "")
+            if abstract and abstract.strip():
+                preview = abstract[:100] + "..." if len(abstract) > 100 else abstract
+                print(f'    Sample {i+1}: "{preview}"')
+            else:
+                print(f"    Sample {i+1}: [NO ABSTRACT]")
+
+    print("\nAbstract availability by source:")
+    check_abstracts(ss_results, "Semantic Scholar")
+    check_abstracts(oa_results, "OpenAlex")
+    check_abstracts(rw_results, "ReliefWeb")
+    check_abstracts(who_results, "WHO IRIS")
+
+    results.extend(ss_results)
+    results.extend(oa_results)
+    results.extend(rw_results)
+    results.extend(who_results)
+
+    total_with_abstracts = sum(
+        1 for r in results if r.get("abstract") and r.get("abstract").strip()
+    )
+    print(f"\nOverall: {total_with_abstracts}/{len(results)} results have abstracts")
     return results
 
 

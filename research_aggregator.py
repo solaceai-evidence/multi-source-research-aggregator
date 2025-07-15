@@ -23,7 +23,7 @@ RELIEFWEB_URL = "https://api.reliefweb.int/v1/reports"
 WHO_IRIS_OAI_URL = "https://iris.who.int/oai/request"
 PERSISTENCE_PATH = "vector_store.pkl"
 
-# Model Initialization TODO: replace by crossencoder
+# Model Initialization TODO: replace by crossencoder with task-specific prompts
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
@@ -361,7 +361,12 @@ async def main():
     print("=" * 40)
 
     # You can modify the query here or make it interactive
-    query_term = "malaria vaccine effectiveness in Africa"
+    # Example query 1: wastewater environmental surveillance Vibrio cholerae outbreaks
+    # Example query 2: malaria vaccine effectiveness in Africa
+    # Example query 3: climate change impact on vector-borne diseases | vector-borne diseases | vector-borne diseases Europe
+    # Example query 4: COVID-19 impact on mental health
+    # Example query 5: white paint corrugated iron roofs effects
+    query_term = "vector-borne diseases Europe"
 
     all_results = await aggregate(query_term)
 
@@ -386,7 +391,7 @@ async def main():
         if result.get("year"):
             print(f"   Year: {result['year']}")
         if result.get("missing_abstract"):
-            print("   ⚠️  Missing or incomplete abstract")
+            print("Missing or incomplete abstract")
         print()
 
 
